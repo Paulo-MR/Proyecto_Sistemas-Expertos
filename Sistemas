@@ -1,0 +1,177 @@
+import re
+import json
+import networkx as nx
+import matplotlib.pyplot as plt
+import pandas as pd
+from itertools import product
+
+def transformar_a_logica(oracion):
+    elementos = re.split(r'\s+y\s+|\s+o\s+', oracion)
+    expresion_logica = oracion.replace(" y ", " ∧ ").replace(" o ", " ∨ ")
+    etiquetas = ['X', 'Y', 'Z', 'W', 'P', 'Q']
+    correspondencia = {elementos[i]: etiquetas[i] for i in range(len(elementos))}
+    
+    for elemento, etiqueta in correspondencia.items():
+        expresion_logica = expresion_logica.replace(elemento, etiqueta)
+    
+    return expresion_logica, correspondencia
+
+def crear_tabla_verdad(expresion_logica, correspondencia):
+    variables = list(correspondencia.values())
+    n = len(variables)
+    casos = list(product([True, False], repeat=n))
+    tabla_verdad = []
+
+    for caso in casos:
+        valor_actual = dict(zip(variables, caso))
+        resultado = eval(expresion_logica.replace("∧", " and ").replace("∨", " or "), {}, valor_actual)
+        tabla_verdad.append((caso, resultado))
+    
+    return tabla_verdad
+
+def guardar_tabla_como_imagen(tabla, nombre_imagen):
+    casos = [list(caso) + [resultado] for caso, resultado in tabla]
+    columnas = [f'Caso {i+1}' for i in range(len(casos[0]) - 1)] + ['Resultado']
+    
+    df = pd.DataFrame(casos, columns=columnas)
+    fig, ax = plt.subplots(figsize=(8, len(df) * 0.5 + 1))
+    ax.axis('tight')
+    ax.axis('off')
+    tabla_mostrar = ax.table(cellText=df.values, colLabels=df.columns, cellLoc='center', loc='center')
+    tabla_mostrar.auto_set_font_size(False)
+    tabla_mostrar.set_fontsize(10)
+    plt.title('Tabla de Verdad')
+    plt.savefig(nombre_imagen, bbox_inches='tight')
+    plt.close()
+
+def generar_arbol_decisiones(correspondencia, tabla_verdad):
+    G = nx.DiGraph()
+    
+    # Crear un nodo inicial
+    G.add_node("Inicio")
+    
+    # Crear nodos y conexiones basadas en la tabla de verdad
+    for (valores, resultado) in tabla_verdad:
+        nodo_actual = "Inicio"
+        
+        # Crear un camino para cada caso en la tabla de verdad
+        for idx, variable in enumerate(correspondencia.values()):
+            valor = valores[idx]
+            nuevo_nodo = f"{variable}={'V' if valor else 'F'}"
+            
+            # Añadir un nodo solo si no existe
+            G.add_node(nuevo_nodo)
+            G.add_edge(nodo_actual, nuevo_nodo)
+            nodo_actual = nuevo_nodo  # Mover al nuevo nodo
+
+        # Al final, conectar al resultado
+        resultado_nodo = f"Resultado={'V' if resultado else 'F'}"
+        G.add_node(resultado_nodo)
+        G.add_edge(nodo_actual, resultado_nodo)
+
+    # Guardar el árbol como imagen
+    plt.figure(figsize=(12, 8))
+    pos = nx.spring_layout(G)
+    nx.draw(G, pos, with_labels=True, node_size=3000, node_color="skyblue", font_size=8, font_weight="bold", arrows=True)
+    plt.title("Árbol de Decisiones")
+    plt.savefig("arbol_decisiones.png")  # Guardar la imagen del árbol
+    plt.close()  # Cerrar la figura para evitar mostrarla
+
+def mostrar_tabla_de_atomos(tabla_verdad, correspondencia):
+    print("\nTabla de Átomos:")
+    print("Variables | Valor")
+    for caso, resultado in tabla_verdad:
+        valores_atomos = {variable: valor for variable, valor in zip(correspondencia.values(), caso)}
+        print(f"{valores_atomos} | Resultado: {'V' if resultado else 'F'}")
+
+def guardar_tabla_de_atomos_como_imagen(tabla_verdad, correspondencia, nombre_imagen):
+    casos = [list(caso) + [resultado] for caso, resultado in tabla_verdad]
+    columnas = list(correspondencia.values()) + ['Resultado']
+    
+    df = pd.DataFrame(casos, columns=columnas)
+    fig, ax = plt.subplots(figsize=(8, len(df) * 0.5 + 1))
+    ax.axis('tight')
+    ax.axis('off')
+    tabla_mostrar = ax.table(cellText=df.values, colLabels=df.columns, cellLoc='center', loc='center')
+    tabla_mostrar.auto_set_font_size(False)
+    tabla_mostrar.set_fontsize(10)
+    plt.title('Tabla de Átomos')
+    plt.savefig(nombre_imagen, bbox_inches='tight')
+    plt.close()
+
+def programa_principal():
+    lista_reglas = []
+    archivo_json = "reglas.json"
+
+    while True:
+        print("\n1. Crear nueva regla")
+        print("2. Mostrar reglas, tabla de verdad, tabla de átomos y árbol de decisiones")
+        print("3. Guardar reglas")
+        print("4. Cargar reglas")
+        print("5. Salir")
+        
+        opcion = input("Seleccione una opción: ")
+        
+        if opcion == "1":
+            oracion = input("Ingrese una proposición lógica: ")
+            expresion_logica, correspondencia = transformar_a_logica(oracion)
+            lista_reglas.append({"expresion_logica": expresion_logica, "correspondencia": correspondencia})
+            print("Regla creada.")
+        
+        elif opcion == "2":
+            for regla in lista_reglas:
+                expresion_logica = regla["expresion_logica"]
+                correspondencia = regla["correspondencia"]
+                
+                print(f"\nExpresión lógica: {expresion_logica}")
+                print("Correspondencia de proposiciones:", correspondencia)
+                
+                # Generar y mostrar tabla de verdad
+                tabla_verdad = crear_tabla_verdad(expresion_logica, correspondencia)
+                guardar_tabla_como_imagen(tabla_verdad, "tabla_verdad.png")  # Guardar tabla de verdad como imagen
+                print(f"Tabla de verdad guardada como 'tabla_verdad.png'.")
+                
+                # Mostrar tabla de verdad
+                img = plt.imread("tabla_verdad.png")
+                plt.imshow(img)
+                plt.axis('off')  # Ocultar los ejes
+                plt.show()
+
+                # Mostrar tabla de átomos
+                mostrar_tabla_de_atomos(tabla_verdad, correspondencia)
+
+                # Guardar tabla de átomos como imagen
+                guardar_tabla_de_atomos_como_imagen(tabla_verdad, correspondencia, "tabla_atomos.png")
+                print(f"Tabla de átomos guardada como 'tabla_atomos.png'.")
+
+                # Generar y mostrar árbol de decisiones
+                generar_arbol_decisiones(correspondencia, tabla_verdad)
+
+                # Mostrar árbol de decisiones
+                img = plt.imread("arbol_decisiones.png")
+                plt.imshow(img)
+                plt.axis('off')  # Ocultar los ejes
+                plt.show()
+        
+        elif opcion == "3":
+            with open(archivo_json, 'w', encoding='utf-8') as file:
+                json.dump(lista_reglas, file)
+            print(f"Reglas guardadas en {archivo_json}.")
+        
+        elif opcion == "4":
+            try:
+                with open(archivo_json, 'r', encoding='utf-8') as file:
+                    lista_reglas = json.load(file)
+                print(f"Reglas recuperadas desde {archivo_json}.")
+            except FileNotFoundError:
+                print("Archivo no encontrado.")
+        
+        elif opcion == "5":
+            print("Saliendo del programa.")
+            break
+        else:
+            print("Opción no válida. Intente nuevamente.")
+
+if __name__ == "__main__":
+
+    programa_principal()
